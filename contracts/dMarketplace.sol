@@ -20,69 +20,92 @@ contract dMarketPlace {
         bool isSeller;
     }
 
-    uint256 productCount;
+    uint productCount;
 
-    mapping(uint256 => Product) public products;
     mapping(address => User) public users;
+    mapping(uint => Product) public products;
 
-    constructor() {
-        owner = msg.sender;
-    }
+    function register(string memory _name, bool _isSeller) public {
+        require(users[msg.sender].userId == address(0), "User already exists");
 
-    function register(string memory _name, bool _isSeller)
-        public
-        returns (bool)
-    {
-        users[msg.sender] = User({
-            userId: msg.sender,
-            name: _name,
-            isSeller: _isSeller
-        });
-        return true;
+        users[msg.sender] = User(msg.sender, _name, _isSeller);
     }
 
     function addProduct(
         string memory _name,
         string memory _description,
-        uint256 _price,
-        uint256 _quantity
+        uint price,
+        uint quantity
     ) public {
-        require(users[msg.sender].isSeller == true, "You are not a seller");
+        require(users[msg.sender].isSeller, "User is not a seller");
 
-        products[productCount] = Product({
-            sellerId: payable(msg.sender),
-            id: productCount + 1,
-            name: _name,
-            description: _description,
-            price: _price,
-            quantity: _quantity
-        });
+        productCount++;
+        products[productCount] = Product(
+            payable(msg.sender),
+            productCount,
+            _name,
+            _description,
+            price,
+            quantity
+        );
     }
 
-    function buyProduct(uint256 _productId, uint256 _quantity) public payable {
-        _productId -= 1;
+    function buyProduct(uint _productId) public {
+        require(users[msg.sender].userId != address(0), "User does not exist");
+        require(products[_productId].id != 0, "Product does not exist");
+        require(products[_productId].quantity > 0, "Product is out of stock");
         require(
-            products[_productId].quantity >= _quantity,
-            "product is out of stock"
+            products[_productId].sellerId != msg.sender,
+            "User cannot buy their own product"
         );
         require(
-            msg.value >= (products[_productId].price * _quantity),
-            "pay equal amount"
+            products[_productId].price <= msg.sender.balance,
+            "User does not have enough balance"
         );
 
-        products[_productId].quantity -= _quantity;
-
-        address payable seller = products[_productId].sellerId;
-
-        sendMoney(seller, address(this).balance);
+        products[_productId].quantity--;
+        products[_productId].sellerId.transfer(products[_productId].price);
     }
 
-    function sendMoney(address to, uint256 value) private {
-        address payable receiver = payable(to);
-        receiver.transfer(value);
+    function getBalance() public view returns (uint) {
+        return msg.sender.balance;
     }
 
-    function getContractBalance() public view returns(uint) {
+    function getContractBalance() public view returns (uint) {
         return address(this).balance;
+    }
+
+    function listProducts() public view returns (Product[] memory) {
+        Product[] memory _products = new Product[](productCount);
+
+        for (uint i = 1; i <= productCount; i++) {
+            _products[i - 1] = products[i];
+        }
+
+        return _products;
+    }
+
+    function listProductsBySeller(
+        address _sellerId
+    ) public view returns (Product[] memory) {
+        uint count = 0;
+
+        for (uint i = 1; i <= productCount; i++) {
+            if (products[i].sellerId == _sellerId) {
+                count++;
+            }
+        }
+
+        Product[] memory _products = new Product[](count);
+        uint index = 0;
+
+        for (uint i = 1; i <= productCount; i++) {
+            if (products[i].sellerId == _sellerId) {
+                _products[index] = products[i];
+                index++;
+            }
+        }
+
+        return _products;
     }
 }
